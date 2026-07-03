@@ -1,5 +1,6 @@
 export default {
   async fetch(request, env) {
+    // 1. Chỉ chấp nhận phương thức POST
     if (request.method !== "POST") {
       return new Response(JSON.stringify({ error: "Only POST allowed" }), { 
         status: 405,
@@ -7,40 +8,52 @@ export default {
       });
     }
 
+    let diff = "";
+
+    // 2. Bộ lọc dữ liệu thông minh (Chống crash tuyệt đối khi parse JSON)
     try {
-      const { diff } = await request.json();
-      
-      if (!diff) {
-        return new Response(JSON.stringify({ error: "Missing diff parameter" }), { 
-          status: 400,
-          headers: { "Content-Type": "application/json" }
-        });
+      // Thử đọc theo kiểu JSON chuẩn trước
+      const bodyText = await request.text();
+      try {
+        const parsed = JSON.parse(bodyText);
+        diff = parsed.diff || bodyText;
+      } catch (e) {
+        // Nếu không phải JSON chuẩn (dính lỗi parse), coi nguyên cái body đó là chuỗi diff luôn!
+        diff = bodyText;
       }
-      
+    } catch (err) {
+      return new Response(JSON.stringify({ error: "Cannot read request body", details: err.message }), { 
+        status: 400, 
+        headers: { "Content-Type": "application/json" }
+      });
+    }
+
+    // 3. Tiến hành gọi AI xử lý khi đã có chuỗi diff sạch
+    try {
       const systemPrompt = "You are an elite Senior Software Architect. Your mission is to audit Pull Requests strictly based on clean architecture, decoupling, and security standards.\n\n" +
                            "CRITICAL CHECKLIST:\n" +
-                           "1. ARCHITECTURAL DECOUPLING: Ensure core domain logic is decoupled from infrastructure. Catch any leaks where business domains import platform-specific tools.\n" +
-                           "2. STATELESS SECURITY: Audit authentication flows (JWT, OAuth2). Flag any hardcoded secrets, weak token generation, or insecure credential management.\n" +
-                           "3. CODE QUALITY (SMELLS): Detect overly complex functions, deep nesting, missing error handling (silent failures).\n\n" +
+                           "1. ARCHITECTURAL DECOUPLING: Ensure core domain logic is decoupled from infrastructure.\n" +
+                           "2. STATELESS SECURITY: Audit authentication flows, flag hardcoded secrets.\n" +
+                           "3. CODE QUALITY: Detect missing error handling.\n\n" +
                            "REQUIRED OUTPUT FORMAT:\n" +
-                           "If you find any issue, you MUST provide the response strictly using GitHub's suggestion block format so the developer can apply it with 1-click.\n" +
                            "Format your response exactly like this:\n" +
-                           "- **Issue**: [Briefly explain what is wrong]\n" +
-                           "- **Architectural Impact**: [Why it hurts the system scale/security]\n" +
+                           "- **Issue**: [What is wrong]\n" +
+                           "- **Architectural Impact**: [Why it hurts system]\n" +
                            "- **Suggested Fix**:\n" +
                            "```suggestion\n" +
-                           "[Provide the exact, clean, ready-to-run replacement code here]\n" +
+                           "[Provide clean replacement code]\n" +
                            "```\n\n" +
-                           "If the code looks completely solid, simply reply with exactly: 'LGTM 👍'";
+                           "If the code looks solid, reply with: 'LGTM 👍'";
 
-      // Gọi model AI Cloudflare
-      const aiResponse = await env.AI.run('const aiResponse = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+      // Gọi model Llama 3.1 ổn định nhất hiện tại
+      const aiResponse = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Here is the Git Diff to review:\n\n${diff}` }
         ]
       });
 
+      // Bóc tách kết quả an toàn
       let reviewResult = "";
       if (aiResponse && typeof aiResponse === 'object') {
         reviewResult = aiResponse.response || aiResponse.answer || JSON.stringify(aiResponse);
@@ -57,7 +70,7 @@ export default {
 
     } catch (error) {
       return new Response(JSON.stringify({ 
-        error: "Gateway Internal Error", 
+        error: "AI Generation Error", 
         details: error.message 
       }), { 
         status: 500,
