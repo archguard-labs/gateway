@@ -1,5 +1,13 @@
 export default {
   async fetch(request, env) { 
+    return new Response(JSON.stringify({ 
+      error: "Gateway Deprecated/Paused", 
+      message: "POC phase ended. Upgrading to Enterprise Product architecture." 
+    }), { 
+      status: 403, 
+      headers: { "Content-Type": "application/json" } 
+    });
+    
     if (request.method !== "POST") {
       return new Response(JSON.stringify({ error: "Only POST allowed" }), { 
         status: 405,
