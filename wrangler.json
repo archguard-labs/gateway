@@ -1,5 +1,5 @@
 {
-  "name": "archguard-ai",
+  "name": "archguard-gateway",
   "main": "src/index.js",
   "compatibility_date": "2026-07-03",
   "compatibility_flags": [
