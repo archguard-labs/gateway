@@ -34,7 +34,7 @@ export default {
                            "If the code looks completely solid, simply reply with exactly: 'LGTM 👍'";
 
       // Gọi model AI Cloudflare
-      const aiResponse = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
+      const aiResponse = await env.AI.run('const aiResponse = await env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Here is the Git Diff to review:\n\n${diff}` }
