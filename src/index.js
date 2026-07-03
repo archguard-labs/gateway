@@ -1,6 +1,5 @@
 export default {
-  async fetch(request, env) {
-    // 1. Chỉ chấp nhận phương thức POST
+  async fetch(request, env) { 
     if (request.method !== "POST") {
       return new Response(JSON.stringify({ error: "Only POST allowed" }), { 
         status: 405,
@@ -10,15 +9,13 @@ export default {
 
     let diff = "";
 
-    // 2. Bộ lọc dữ liệu thông minh (Chống crash tuyệt đối khi parse JSON)
+
     try {
-      // Thử đọc theo kiểu JSON chuẩn trước
       const bodyText = await request.text();
       try {
         const parsed = JSON.parse(bodyText);
         diff = parsed.diff || bodyText;
       } catch (e) {
-        // Nếu không phải JSON chuẩn (dính lỗi parse), coi nguyên cái body đó là chuỗi diff luôn!
         diff = bodyText;
       }
     } catch (err) {
@@ -28,7 +25,6 @@ export default {
       });
     }
 
-    // 3. Tiến hành gọi AI xử lý khi đã có chuỗi diff sạch
     try {
       const systemPrompt = "You are an elite Senior Software Architect. Your mission is to audit Pull Requests strictly based on clean architecture, decoupling, and security standards.\n\n" +
                            "CRITICAL CHECKLIST:\n" +
@@ -45,15 +41,13 @@ export default {
                            "```\n\n" +
                            "If the code looks solid, reply with: 'LGTM 👍'";
 
-      // Gọi model Llama 3.1 ổn định nhất hiện tại
-      const aiResponse = await env.AI.run('@cf/meta/llama-3.1-8b-instruct', {
+      const aiResponse = await env.AI.run('@cf/meta/llama-3.3-70b-instruct', {
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Here is the Git Diff to review:\n\n${diff}` }
         ]
       });
 
-      // Bóc tách kết quả an toàn
       let reviewResult = "";
       if (aiResponse && typeof aiResponse === 'object') {
         reviewResult = aiResponse.response || aiResponse.answer || JSON.stringify(aiResponse);
