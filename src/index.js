@@ -41,7 +41,7 @@ export default {
                            "```\n\n" +
                            "If the code looks solid, reply with: 'LGTM 👍'";
 
-      const aiResponse = await env.AI.run('@cf/meta/llama-3.3-70b-instruct', {
+      const aiResponse = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: `Here is the Git Diff to review:\n\n${diff}` }
