@@ -91,7 +91,7 @@ export default {
         let aiResponse = "";
         try {
           // Assuming Cloudflare AI binding is available at env.AI
-          const result = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
+          const result = await env.AI.run('@cf/meta/llama-4-scout-17b-16e-instruct', {
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: `Here is the Git Diff to review:\n\n${diff}` }
