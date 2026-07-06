@@ -7,8 +7,8 @@ The enterprise-grade serverless backend powering ArchGuard AI. Built on Cloudfla
 ## Technical Architecture
 
 This repository acts as the Server-side Gateway within the ArchGuard ecosystem. It works closely with the client-side GitHub Action runner:
-* Client Side (GitHub Action Runner): [archguard-ai](https://github.com/paudang/archguard-ai)
-* Server Side (Edge Gateway): [archguard-gateway](https://github.com/paudang/archguard-gateway)
+* Client Side (GitHub Action Runner): [archguard-labs/action](https://github.com/archguard-labs/action)
+* Server Side (Edge Gateway): [archguard-labs/gateway](https://github.com/archguard-labs/gateway)
 
 ```text
 +------------------------+
