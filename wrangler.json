@@ -24,6 +24,12 @@
       }
     ]
   },
+  "kv_namespaces": [
+    {
+      "binding": "RATE_LIMIT_KV",
+      "id": "9c8f295b39704d78a0c0220df1014ee2"
+    }
+  ],
   "vars": {
     "LOCAL_DEV": "true"
   }

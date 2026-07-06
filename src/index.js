@@ -61,6 +61,24 @@ export default {
       // Ignore
     }
 
+    // Rate Limiting Logic
+    if (env.RATE_LIMIT_KV && parsedPayload.owner && parsedPayload.repo) {
+      const repoPath = `${parsedPayload.owner}/${parsedPayload.repo}`;
+      const dateStr = new Date().toISOString().split('T')[0];
+      const key = `ratelimit:${dateStr}:${repoPath}`;
+      
+      let count = parseInt(await env.RATE_LIMIT_KV.get(key) || "0", 10);
+      
+      if (count >= 50) {
+        return new Response(JSON.stringify({ error: `Rate limit exceeded for ${repoPath} (50 PRs/day)` }), {
+          status: 429,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+      
+      await env.RATE_LIMIT_KV.put(key, count + 1, { expirationTtl: 86400 });
+    }
+
     // Enqueue the payload for asynchronous processing
     if (env.ARCHGUARD_QUEUE) {
       await env.ARCHGUARD_QUEUE.send(parsedPayload);
@@ -95,7 +113,8 @@ export default {
             messages: [
               { role: 'system', content: systemPrompt },
               { role: 'user', content: `Here is the Git Diff to review:\n\n${diff}` }
-            ]
+            ],
+            max_tokens: 2048
           });
           aiResponse = result.response || "LGTM 👍";
         } catch (e) {
