@@ -7,8 +7,8 @@ The enterprise-grade serverless backend powering ArchGuard AI. Built on Cloudfla
 ## Technical Architecture
 
 This repository acts as the Server-side Gateway within the ArchGuard ecosystem. It works closely with the client-side GitHub Action runner:
-* Client Side (GitHub Action Runner): [archguard-ai](https://github.com/paudang/archguard-ai)
-* Server Side (Edge Gateway): [archguard-gateway](https://github.com/paudang/archguard-gateway)
+* Client Side (GitHub Action Runner): [archguard-labs/action](https://github.com/archguard-labs/action)
+* Server Side (Edge Gateway): [archguard-labs/gateway](https://github.com/archguard-labs/gateway)
 
 ```text
 +------------------------+
@@ -61,6 +61,24 @@ To run and deploy this worker, the following variables and secrets must be confi
 | :--- | :--- | :--- |
 | `SHARED_SECRET` | Secret | The symmetric key used to compute and verify the HMAC SHA-256 request signatures originating from the GitHub Runner. |
 | `ARCHGUARD_QUEUE` | Binding | The Cloudflare Queue binding name designated as the asynchronous message broker buffer. |
+
+## Local Development & Testing
+
+You can spin up a local Cloudflare Edge environment to test the full End-to-End workflow (Authentication -> Queue -> AI Inference) without deploying to production or using a real GitHub PR.
+
+### Quick Start
+1. **Start the Local Gateway**:
+   ```bash
+   npm run dev
+   ```
+   *This starts Wrangler locally on `http://127.0.0.1:8787` and connects to the remote AI models for inference.*
+
+2. **Trigger the E2E Test**:
+   Open a second terminal window and run:
+   ```bash
+   npm run test:e2e
+   ```
+   *This script acts like the GitHub Action. It generates a fake PR diff, signs it with HMAC, and pushes it to your local Gateway. Watch the Wrangler terminal to see the AI process the queue!*
 
 ## Live Progress Tracking
 

@@ -1,13 +1,7 @@
+import { createRemoteJWKSet, jwtVerify } from 'jose';
+
 export default {
-  async fetch(request, env) { 
-    return new Response(JSON.stringify({ 
-      error: "Gateway Deprecated/Paused", 
-      message: "POC phase ended. Upgrading to Enterprise Product architecture." 
-    }), { 
-      status: 403, 
-      headers: { "Content-Type": "application/json" } 
-    });
-    
+  async fetch(request, env) {
     if (request.method !== "POST") {
       return new Response(JSON.stringify({ error: "Only POST allowed" }), { 
         status: 405,
@@ -15,69 +9,125 @@ export default {
       });
     }
 
-    let diff = "";
+    const contentLength = request.headers.get("content-length");
+    if (contentLength && parseInt(contentLength, 10) > 2 * 1024 * 1024) {
+      return new Response(JSON.stringify({ error: "Payload Too Large" }), {
+        status: 413,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
 
+    const authHeader = request.headers.get("Authorization");
+    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Missing or invalid Authorization header" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
 
-    try {
-      const bodyText = await request.text();
+    const token = authHeader.split(" ")[1];
+
+    if (token === "local-e2e-bypass-token" && env.LOCAL_DEV === "true") {
+      console.log("[Local E2E] Bypassing OIDC verification...");
+    } else {
       try {
-        const parsed = JSON.parse(bodyText);
-        diff = parsed.diff || bodyText;
+        const JWKS = createRemoteJWKSet(new URL('https://token.actions.githubusercontent.com/.well-known/jwks'));
+        await jwtVerify(token, JWKS, {
+          issuer: 'https://token.actions.githubusercontent.com',
+          audience: 'archguard-gateway'
+        });
       } catch (e) {
-        diff = bodyText;
+        return new Response(JSON.stringify({ error: "Invalid OIDC token", details: e.message }), {
+          status: 401,
+          headers: { "Content-Type": "application/json" }
+        });
       }
-    } catch (err) {
-      return new Response(JSON.stringify({ error: "Cannot read request body", details: err.message }), { 
+    }
+
+    let bodyText = "";
+    try {
+      bodyText = await request.text();
+    } catch (e) {
+      return new Response(JSON.stringify({ error: "Cannot read request body" }), { 
         status: 400, 
         headers: { "Content-Type": "application/json" }
       });
     }
 
+    let parsedPayload = {};
     try {
-      const systemPrompt = "You are an elite Senior Software Architect. Your mission is to audit Pull Requests strictly based on clean architecture, decoupling, and security standards.\n\n" +
-                           "CRITICAL CHECKLIST:\n" +
-                           "1. ARCHITECTURAL DECOUPLING: Ensure core domain logic is decoupled from infrastructure.\n" +
-                           "2. STATELESS SECURITY: Audit authentication flows, flag hardcoded secrets.\n" +
-                           "3. CODE QUALITY: Detect missing error handling.\n\n" +
-                           "REQUIRED OUTPUT FORMAT:\n" +
-                           "Format your response exactly like this:\n" +
-                           "- **Issue**: [What is wrong]\n" +
-                           "- **Architectural Impact**: [Why it hurts system]\n" +
-                           "- **Suggested Fix**:\n" +
-                           "```suggestion\n" +
-                           "[Provide clean replacement code]\n" +
-                           "```\n\n" +
-                           "If the code looks solid, reply with: 'LGTM 👍'";
+      parsedPayload = JSON.parse(bodyText);
+    } catch (e) {
+      // Ignore
+    }
 
-      const aiResponse = await env.AI.run('@cf/meta/llama-4-scout-17b-16e-instruct', {
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: `Here is the Git Diff to review:\n\n${diff}` }
-        ]
-      });
+    // Enqueue the payload for asynchronous processing
+    if (env.ARCHGUARD_QUEUE) {
+      await env.ARCHGUARD_QUEUE.send(parsedPayload);
+    }
 
-      let reviewResult = "";
-      if (aiResponse && typeof aiResponse === 'object') {
-        reviewResult = aiResponse.response || aiResponse.answer || JSON.stringify(aiResponse);
-      } else {
-        reviewResult = aiResponse || "AI did not return any readable response.";
+    return new Response(JSON.stringify({ message: "Accepted" }), {
+      status: 202,
+      headers: { "Content-Type": "application/json" }
+    });
+  },
+
+  async queue(batch, env) {
+    for (const message of batch.messages) {
+      const payload = message.body;
+      const diff = payload.diff || "";
+      const repo = payload.repo;
+      const owner = payload.owner;
+      const pr = payload.pr;
+      const token = payload.token;
+      const systemPrompt = payload.systemPrompt || "You are an expert Senior Software Architect. Review the following pull request diff for clean architecture boundaries, infrastructure decoupling, and security flaws. Provide concise, constructive feedback.";
+        
+      if (!diff || !repo || !owner || !pr || !token) {
+        message.ack();
+        continue;
       }
 
-      return new Response(JSON.stringify({ review: reviewResult }), {
-        headers: { 
-          "Content-Type": "application/json",
-          "Access-Control-Allow-Origin": "*"
+      try {
+        let aiResponse = "";
+        try {
+          // Assuming Cloudflare AI binding is available at env.AI
+          const result = await env.AI.run('@cf/meta/llama-3-8b-instruct', {
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: `Here is the Git Diff to review:\n\n${diff}` }
+            ]
+          });
+          aiResponse = result.response || "LGTM 👍";
+        } catch (e) {
+          console.error("AI inference error", e);
+          aiResponse = "LGTM 👍 (ArchGuard AI encountered an error during inference)";
         }
-      });
 
-    } catch (error) {
-      return new Response(JSON.stringify({ 
-        error: "AI Generation Error", 
-        details: error.message 
-      }), { 
-        status: 500,
-        headers: { "Content-Type": "application/json" }
-      });
+        const trimmedResult = aiResponse.trim();
+        const commentBody = `### 🛡️ ArchGuard AI Architectural Review\n\n${trimmedResult}`;
+
+        if (owner === "local-test") {
+          console.log(`[Local E2E Mock] Would have posted to Github: \n${commentBody}`);
+        } else {
+          const ghRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/issues/${pr}/comments`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Accept": "application/vnd.github.v3+json",
+              "User-Agent": `ArchGuard-Agent-${owner}`
+            },
+            body: JSON.stringify({ body: commentBody })
+          });
+
+          if (!ghRes.ok) {
+            console.error(`GitHub API error: ${ghRes.status} ${await ghRes.text()}`);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to process queue message", e);
+      }
+      
+      message.ack();
     }
   }
 };

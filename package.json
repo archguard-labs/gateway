@@ -3,6 +3,16 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "dev": "wrangler dev --remote",
+    "test": "vitest run",
+    "test:e2e": "node scripts/e2e.js",
     "deploy": "wrangler deploy"
+  },
+  "devDependencies": {
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "jose": "^6.2.3"
   }
 }
