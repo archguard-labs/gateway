@@ -62,6 +62,24 @@ To run and deploy this worker, the following variables and secrets must be confi
 | `SHARED_SECRET` | Secret | The symmetric key used to compute and verify the HMAC SHA-256 request signatures originating from the GitHub Runner. |
 | `ARCHGUARD_QUEUE` | Binding | The Cloudflare Queue binding name designated as the asynchronous message broker buffer. |
 
+## Local Development & Testing
+
+You can spin up a local Cloudflare Edge environment to test the full End-to-End workflow (Authentication -> Queue -> AI Inference) without deploying to production or using a real GitHub PR.
+
+### Quick Start
+1. **Start the Local Gateway**:
+   ```bash
+   npm run dev
+   ```
+   *This starts Wrangler locally on `http://127.0.0.1:8787` and connects to the remote AI models for inference.*
+
+2. **Trigger the E2E Test**:
+   Open a second terminal window and run:
+   ```bash
+   npm run test:e2e
+   ```
+   *This script acts like the GitHub Action. It generates a fake PR diff, signs it with HMAC, and pushes it to your local Gateway. Watch the Wrangler terminal to see the AI process the queue!*
+
 ## Live Progress Tracking
 
 This project is actively moving from its validated Proof of Concept (POC) state into a reliable open-source product. The active roadmap, sprint breakdowns, and technical tasks are monitored publicly on our [Trello Board](https://trello.com/b/QH0sQ7EJ/archguard-ai).

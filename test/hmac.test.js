@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import worker from '../src/index';
+import worker from '../src/index.js';
 
 describe('HMAC Verification Worker', () => {
   const MASTER_KEY = 'secret-master-key';
   
-  async function generateHMAC(body: string, repo: string, timestamp: number) {
+  async function generateHMAC(body, repo, timestamp) {
     const encoder = new TextEncoder();
     const key = await crypto.subtle.importKey(
       "raw",
@@ -37,8 +37,23 @@ describe('HMAC Verification Worker', () => {
       body
     });
 
-    const response = await worker.fetch(request, { ARCHGUARD_MASTER_KEY: MASTER_KEY });
+    const mockQueue = { send: async () => {} };
+    const response = await worker.fetch(request, { 
+      ARCHGUARD_MASTER_KEY: MASTER_KEY,
+      ARCHGUARD_QUEUE: mockQueue
+    });
     expect(response.status).toBe(202);
+  });
+
+  it('Payload Size Limits: should return HTTP 413 if content-length exceeds 2MB', async () => {
+    const request = new Request('http://localhost/audit', {
+      method: 'POST',
+      headers: {
+        'Content-Length': (2 * 1024 * 1024 + 1).toString()
+      }
+    });
+    const response = await worker.fetch(request, { ARCHGUARD_MASTER_KEY: MASTER_KEY });
+    expect(response.status).toBe(413);
   });
 
   it('Tampered Payload Path: should return HTTP 401 Unauthorized if body diff is altered', async () => {

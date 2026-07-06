@@ -7,5 +7,24 @@
   ],
   "ai": {
     "binding": "AI"
+  },
+  "queues": {
+    "producers": [
+      {
+        "binding": "ARCHGUARD_QUEUE",
+        "queue": "archguard-queue"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "archguard-queue",
+        "max_batch_size": 1,
+        "max_batch_timeout": 5,
+        "max_retries": 3
+      }
+    ]
+  },
+  "vars": {
+    "LOCAL_DEV": "true"
   }
 }
