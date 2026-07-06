@@ -100,7 +100,7 @@ export default {
           aiResponse = result.response || "LGTM 👍";
         } catch (e) {
           console.error("AI inference error", e);
-          aiResponse = "LGTM 👍 (ArchGuard AI encountered an error during inference)";
+          aiResponse = `LGTM 👍 (ArchGuard AI encountered an error during inference: ${e.message})`;
         }
 
         const trimmedResult = aiResponse.trim();
