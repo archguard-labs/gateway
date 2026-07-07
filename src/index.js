@@ -2,6 +2,31 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 export default {
   async fetch(request, env) {
+    const url = new URL(request.url);
+    if (request.method === "GET" && url.pathname.startsWith("/dashboard/")) {
+      const parts = url.pathname.split('/');
+      if (parts.length >= 4) {
+        const owner = parts[2];
+        const repo = parts[3];
+        let debtData = { checks: 0, issues: 0 };
+        if (env.RATE_LIMIT_KV) {
+           debtData = await env.RATE_LIMIT_KV.get(`techdebt:${owner}/${repo}`, "json") || { checks: 0, issues: 0 };
+        }
+        const html = `<html>
+          <head><title>ArchGuard Dashboard</title><style>body{font-family:sans-serif;padding:2rem;background:#111;color:#fff;} .card{background:#222;padding:2rem;border-radius:12px;border:1px solid #333;}</style></head>
+          <body>
+            <h1>🛡️ ArchGuard Tech Debt Dashboard</h1>
+            <h2>${owner}/${repo}</h2>
+            <div class="card">
+              <p>Total Pull Requests Reviewed: <b>${debtData.checks}</b></p>
+              <p>Total Architectural Flaws Blocked: <b style="color:#ff4444;">${debtData.issues}</b></p>
+            </div>
+          </body>
+        </html>`;
+        return new Response(html, { headers: { "Content-Type": "text/html" } });
+      }
+    }
+
     if (request.method !== "POST") {
       return new Response(JSON.stringify({ error: "Only POST allowed" }), { 
         status: 405,
@@ -76,7 +101,7 @@ export default {
         });
       }
       
-      await env.RATE_LIMIT_KV.put(key, count + 1, { expirationTtl: 86400 });
+      await env.RATE_LIMIT_KV.put(key, (count + 1).toString(), { expirationTtl: 86400 });
     }
 
     // Enqueue the payload for asynchronous processing
@@ -124,6 +149,17 @@ export default {
 
         const trimmedResult = aiResponse.trim();
         const commentBody = `### 🛡️ ArchGuard AI Architectural Review\n\n${trimmedResult}`;
+
+        // Track technical debt in KV
+        if (env.RATE_LIMIT_KV) {
+          const key = `techdebt:${owner}/${repo}`;
+          const current = await env.RATE_LIMIT_KV.get(key, "json") || { checks: 0, issues: 0 };
+          current.checks += 1;
+          if (!trimmedResult.includes("LGTM 👍")) {
+            current.issues += 1;
+          }
+          await env.RATE_LIMIT_KV.put(key, JSON.stringify(current));
+        }
 
         if (owner === "local-test") {
           console.log(`[Local E2E Mock] Would have posted to Github: \n${commentBody}`);
