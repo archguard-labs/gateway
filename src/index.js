@@ -105,6 +105,11 @@ export default {
         await env.RATE_LIMIT_KV.put(key, (count + 1).toString(), { expirationTtl: 86400 });
       }
 
+      // Truncate payload diff if it exceeds queue limits (Max 128KB per message)
+      if (parsedPayload.diff && typeof parsedPayload.diff === 'string' && parsedPayload.diff.length > 80000) {
+        parsedPayload.diff = parsedPayload.diff.substring(0, 80000) + "\n\n...[DIFF TRUNCATED DUE TO QUEUE SIZE LIMITS]...";
+      }
+
       // Enqueue the payload for asynchronous processing
       if (env.ARCHGUARD_QUEUE) {
         await env.ARCHGUARD_QUEUE.send(parsedPayload);
