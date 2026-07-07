@@ -101,7 +101,7 @@ export default {
         });
       }
       
-      await env.RATE_LIMIT_KV.put(key, count + 1, { expirationTtl: 86400 });
+      await env.RATE_LIMIT_KV.put(key, (count + 1).toString(), { expirationTtl: 86400 });
     }
 
     // Enqueue the payload for asynchronous processing
