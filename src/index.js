@@ -14,7 +14,11 @@ export default {
              debtData = await env.RATE_LIMIT_KV.get(`techdebt:${owner}/${repo}`, "json") || { checks: 0, issues: 0 };
           }
           const html = `<html>
-            <head><title>ArchGuard Dashboard</title><style>body{font-family:sans-serif;padding:2rem;background:#111;color:#fff;} .card{background:#222;padding:2rem;border-radius:12px;border:1px solid #333;}</style></head>
+            <head>
+              <meta charset="UTF-8">
+              <title>ArchGuard Dashboard</title>
+              <style>body{font-family:sans-serif;padding:2rem;background:#111;color:#fff;} .card{background:#222;padding:2rem;border-radius:12px;border:1px solid #333;}</style>
+            </head>
             <body>
               <h1>🛡️ ArchGuard Tech Debt Dashboard</h1>
               <h2>${owner}/${repo}</h2>
