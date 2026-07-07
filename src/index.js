@@ -2,117 +2,124 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 export default {
   async fetch(request, env) {
-    const url = new URL(request.url);
-    if (request.method === "GET" && url.pathname.startsWith("/dashboard/")) {
-      const parts = url.pathname.split('/');
-      if (parts.length >= 4) {
-        const owner = parts[2];
-        const repo = parts[3];
-        let debtData = { checks: 0, issues: 0 };
-        if (env.RATE_LIMIT_KV) {
-           debtData = await env.RATE_LIMIT_KV.get(`techdebt:${owner}/${repo}`, "json") || { checks: 0, issues: 0 };
+    try {
+      const url = new URL(request.url);
+      if (request.method === "GET" && url.pathname.startsWith("/dashboard/")) {
+        const parts = url.pathname.split('/');
+        if (parts.length >= 4) {
+          const owner = parts[2];
+          const repo = parts[3];
+          let debtData = { checks: 0, issues: 0 };
+          if (env.RATE_LIMIT_KV) {
+             debtData = await env.RATE_LIMIT_KV.get(`techdebt:${owner}/${repo}`, "json") || { checks: 0, issues: 0 };
+          }
+          const html = `<html>
+            <head><title>ArchGuard Dashboard</title><style>body{font-family:sans-serif;padding:2rem;background:#111;color:#fff;} .card{background:#222;padding:2rem;border-radius:12px;border:1px solid #333;}</style></head>
+            <body>
+              <h1>🛡️ ArchGuard Tech Debt Dashboard</h1>
+              <h2>${owner}/${repo}</h2>
+              <div class="card">
+                <p>Total Pull Requests Reviewed: <b>${debtData.checks}</b></p>
+                <p>Total Architectural Flaws Blocked: <b style="color:#ff4444;">${debtData.issues}</b></p>
+              </div>
+            </body>
+          </html>`;
+          return new Response(html, { headers: { "Content-Type": "text/html" } });
         }
-        const html = `<html>
-          <head><title>ArchGuard Dashboard</title><style>body{font-family:sans-serif;padding:2rem;background:#111;color:#fff;} .card{background:#222;padding:2rem;border-radius:12px;border:1px solid #333;}</style></head>
-          <body>
-            <h1>🛡️ ArchGuard Tech Debt Dashboard</h1>
-            <h2>${owner}/${repo}</h2>
-            <div class="card">
-              <p>Total Pull Requests Reviewed: <b>${debtData.checks}</b></p>
-              <p>Total Architectural Flaws Blocked: <b style="color:#ff4444;">${debtData.issues}</b></p>
-            </div>
-          </body>
-        </html>`;
-        return new Response(html, { headers: { "Content-Type": "text/html" } });
       }
-    }
 
-    if (request.method !== "POST") {
-      return new Response(JSON.stringify({ error: "Only POST allowed" }), { 
-        status: 405,
-        headers: { "Content-Type": "application/json" }
-      });
-    }
-
-    const contentLength = request.headers.get("content-length");
-    if (contentLength && parseInt(contentLength, 10) > 2 * 1024 * 1024) {
-      return new Response(JSON.stringify({ error: "Payload Too Large" }), {
-        status: 413,
-        headers: { "Content-Type": "application/json" }
-      });
-    }
-
-    const authHeader = request.headers.get("Authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return new Response(JSON.stringify({ error: "Missing or invalid Authorization header" }), {
-        status: 401,
-        headers: { "Content-Type": "application/json" }
-      });
-    }
-
-    const token = authHeader.split(" ")[1];
-
-    if (token === "local-e2e-bypass-token" && env.LOCAL_DEV === "true") {
-      console.log("[Local E2E] Bypassing OIDC verification...");
-    } else {
-      try {
-        const JWKS = createRemoteJWKSet(new URL('https://token.actions.githubusercontent.com/.well-known/jwks'));
-        await jwtVerify(token, JWKS, {
-          issuer: 'https://token.actions.githubusercontent.com',
-          audience: 'archguard-gateway'
+      if (request.method !== "POST") {
+        return new Response(JSON.stringify({ error: "Only POST allowed" }), { 
+          status: 405,
+          headers: { "Content-Type": "application/json" }
         });
-      } catch (e) {
-        return new Response(JSON.stringify({ error: "Invalid OIDC token", details: e.message }), {
+      }
+
+      const contentLength = request.headers.get("content-length");
+      if (contentLength && parseInt(contentLength, 10) > 2 * 1024 * 1024) {
+        return new Response(JSON.stringify({ error: "Payload Too Large" }), {
+          status: 413,
+          headers: { "Content-Type": "application/json" }
+        });
+      }
+
+      const authHeader = request.headers.get("Authorization");
+      if (!authHeader || !authHeader.startsWith("Bearer ")) {
+        return new Response(JSON.stringify({ error: "Missing or invalid Authorization header" }), {
           status: 401,
           headers: { "Content-Type": "application/json" }
         });
       }
-    }
 
-    let bodyText = "";
-    try {
-      bodyText = await request.text();
-    } catch (e) {
-      return new Response(JSON.stringify({ error: "Cannot read request body" }), { 
-        status: 400, 
-        headers: { "Content-Type": "application/json" }
-      });
-    }
+      const token = authHeader.split(" ")[1];
 
-    let parsedPayload = {};
-    try {
-      parsedPayload = JSON.parse(bodyText);
-    } catch (e) {
-      // Ignore
-    }
+      if (token === "local-e2e-bypass-token" && env.LOCAL_DEV === "true") {
+        console.log("[Local E2E] Bypassing OIDC verification...");
+      } else {
+        try {
+          const JWKS = createRemoteJWKSet(new URL('https://token.actions.githubusercontent.com/.well-known/jwks'));
+          await jwtVerify(token, JWKS, {
+            issuer: 'https://token.actions.githubusercontent.com',
+            audience: 'archguard-gateway'
+          });
+        } catch (e) {
+          return new Response(JSON.stringify({ error: "Invalid OIDC token", details: e.message }), {
+            status: 401,
+            headers: { "Content-Type": "application/json" }
+          });
+        }
+      }
 
-    // Rate Limiting Logic
-    if (env.RATE_LIMIT_KV && parsedPayload.owner && parsedPayload.repo) {
-      const repoPath = `${parsedPayload.owner}/${parsedPayload.repo}`;
-      const dateStr = new Date().toISOString().split('T')[0];
-      const key = `ratelimit:${dateStr}:${repoPath}`;
-      
-      let count = parseInt(await env.RATE_LIMIT_KV.get(key) || "0", 10);
-      
-      if (count >= 50) {
-        return new Response(JSON.stringify({ error: `Rate limit exceeded for ${repoPath} (50 PRs/day)` }), {
-          status: 429,
+      let bodyText = "";
+      try {
+        bodyText = await request.text();
+      } catch (e) {
+        return new Response(JSON.stringify({ error: "Cannot read request body" }), { 
+          status: 400, 
           headers: { "Content-Type": "application/json" }
         });
       }
-      
-      await env.RATE_LIMIT_KV.put(key, (count + 1).toString(), { expirationTtl: 86400 });
-    }
 
-    // Enqueue the payload for asynchronous processing
-    if (env.ARCHGUARD_QUEUE) {
-      await env.ARCHGUARD_QUEUE.send(parsedPayload);
-    }
+      let parsedPayload = {};
+      try {
+        parsedPayload = JSON.parse(bodyText);
+      } catch (e) {
+        // Ignore
+      }
 
-    return new Response(JSON.stringify({ message: "Accepted" }), {
-      status: 202,
-      headers: { "Content-Type": "application/json" }
-    });
+      // Rate Limiting Logic
+      if (env.RATE_LIMIT_KV && parsedPayload.owner && parsedPayload.repo) {
+        const repoPath = `${parsedPayload.owner}/${parsedPayload.repo}`;
+        const dateStr = new Date().toISOString().split('T')[0];
+        const key = `ratelimit:${dateStr}:${repoPath}`;
+        
+        let count = parseInt(await env.RATE_LIMIT_KV.get(key) || "0", 10);
+        
+        if (count >= 50) {
+          return new Response(JSON.stringify({ error: `Rate limit exceeded for ${repoPath} (50 PRs/day)` }), {
+            status: 429,
+            headers: { "Content-Type": "application/json" }
+          });
+        }
+        
+        await env.RATE_LIMIT_KV.put(key, (count + 1).toString(), { expirationTtl: 86400 });
+      }
+
+      // Enqueue the payload for asynchronous processing
+      if (env.ARCHGUARD_QUEUE) {
+        await env.ARCHGUARD_QUEUE.send(parsedPayload);
+      }
+
+      return new Response(JSON.stringify({ message: "Accepted" }), {
+        status: 202,
+        headers: { "Content-Type": "application/json" }
+      });
+    } catch (criticalError) {
+      return new Response(JSON.stringify({ error: "Critical Worker Exception", details: criticalError.message, stack: criticalError.stack }), {
+        status: 500,
+        headers: { "Content-Type": "application/json" }
+      });
+    }
   },
 
   async queue(batch, env) {
